@@ -1,11 +1,19 @@
 from django.core.paginator import Paginator
 from django.http import JsonResponse
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+from django.views.generic.base import View
+from rest_framework import status
 
-from .models import Movie
+from .models import Movie, Genre, Torrent
 
 
-def movie_list_create(request):
-    if request.method == 'GET':
+class MovieListCreateView(View):
+    @method_decorator(csrf_exempt)
+    def dispatch(self, request, *args, **kwargs):
+        return super().dispatch(request, *args, **kwargs)
+
+    def get(self, request, *args, **kwargs):
         queryset = Movie.objects.all()
         quality = request.GET.get('quality', '')
         try:
@@ -15,13 +23,13 @@ def movie_list_create(request):
                     'status': 'error',
                     'status_message': 'minimum_rating 은 0 이상 9 이하의 정수만 가능합니다.',
                 }
-                return JsonResponse(error)
+                return JsonResponse(error, status=status.HTTP_400_BAD_REQUEST)
         except ValueError:
             error = {
                 'status': 'error',
                 'status_message': 'minimum_rating 은 0 이상 9 이하의 정수만 가능합니다.',
             }
-            return JsonResponse(error)
+            return JsonResponse(error, status=status.HTTP_400_BAD_REQUEST)
         query_term = request.GET.get('query_term', '')
         genre = request.GET.get('genre', '')
 
@@ -72,13 +80,13 @@ def movie_list_create(request):
                     'status': 'error',
                     'status_message': 'limit 은 1 이상 50 이하의 정수만 가능합니다.',
                 }
-                return JsonResponse(error)
+                return JsonResponse(error, status=status.HTTP_400_BAD_REQUEST)
         except ValueError:
             error = {
                 'status': 'error',
                 'status_message': 'limit 은 1 이상 50 이하의 정수만 가능합니다.',
             }
-            return JsonResponse(error)
+            return JsonResponse(error, status=status.HTTP_400_BAD_REQUEST)
 
         paginator = Paginator(queryset, limit)
         page = request.GET.get('page')
@@ -154,5 +162,99 @@ def movie_list_create(request):
                 }
             })
 
-    elif request.method == 'POST':
-        return
+    def post(self, request, *args, **kwargs):
+        movie = Movie.objects.create(
+            url=request.POST.get('url', None),
+            imdb_code=request.POST.get('imdb_code', None),
+            title=request.POST.get('title', None),
+            title_english=request.POST.get('title_english', None),
+            title_long=request.POST.get('title_long', None),
+            slug=request.POST.get('slug', None),
+            year=request.POST.get('year', None),
+            rating=request.POST.get('rating', None),
+            runtime=request.POST.get('runtime', None),
+            summary=request.POST.get('summary', None),
+            description_full=request.POST.get('description_full', None),
+            synopsis=request.POST.get('synopsis', None),
+            yt_trailer_code=request.POST.get('yt_trailer_code', None),
+            language=request.POST.get('language', None),
+            mpa_rating=request.POST.get('mpa_rating', None),
+            background_image=request.POST.get('background_image', None),
+            background_image_original=request.POST.get('background_image_original', None),
+            small_cover_image=request.POST.get('small_cover_image', None),
+            medium_cover_image=request.POST.get('medium_cover_image', None),
+            large_cover_image=request.POST.get('large_cover_image', None),
+            state=request.POST.get('state', None),
+            date_uploaded=request.POST.get('date_uploaded', None),
+            date_uploaded_unix=request.POST.get('date_uploaded_unix', None),
+        )
+
+        if request.POST.get('genres', ''):
+            genres_list = request.POST.get('genres').split(', ')
+            for i in range(0, len(genres_list)):
+                genre = Genre.objects.get(name=genres_list[i])
+                movie.genres.add(genre)
+
+        if request.POST.get('torrents', ''):
+            torrents_list = request.POST.get('torrents').split(', ')
+            for j in range(0, len(torrents_list)):
+                torrent = Torrent.objects.create(
+                    url=torrents_list[j].json().get('url', None),
+                    hash=torrents_list[j].json().get('hash', None),
+                    quality=torrents_list[j].json().get('quality', None),
+                    seeds=torrents_list[j].json().get('seeds', None),
+                    peers=torrents_list[j].json().get('peers', None),
+                    size=torrents_list[j].json().get('size', None),
+                    size_bytes=torrents_list[j].json().get('size_bytes', None),
+                    date_uploaded=torrents_list[j].json().get('date_uploaded', None),
+                    date_uploaded_unix=torrents_list[j].json().get('date_uploaded_unix', None),
+                )
+                movie.torrents.add(torrent)
+
+        movies_data = []
+        movie_dict = {}
+        movie_dict['id'] = movie.pk
+        movie_dict['url'] = movie.url
+        movie_dict['imdb_code'] = movie.imdb_code
+        movie_dict['title'] = movie.title
+        movie_dict['title_english'] = movie.title_english
+        movie_dict['title_long'] = movie.title_long
+        movie_dict['slug'] = movie.slug
+        movie_dict['year'] = movie.year
+        movie_dict['rating'] = movie.rating
+        movie_dict['runtime'] = movie.runtime
+        genres_list = []
+        for k in movie.genres.all():
+            genres_list.append(k.name)
+        movie_dict['genres'] = genres_list
+        movie_dict['summary'] = movie.summary
+        movie_dict['description_full'] = movie.description_full
+        movie_dict['synopsis'] = movie.synopsis
+        movie_dict['yt_trailer_code'] = movie.yt_trailer_code
+        movie_dict['language'] = movie.language
+        movie_dict['mpa_rating'] = movie.mpa_rating
+        movie_dict['background_image'] = movie.background_image
+        movie_dict['background_image_original'] = movie.background_image_original
+        movie_dict['small_cover_image'] = movie.small_cover_image
+        movie_dict['medium_cover_image'] = movie.medium_cover_image
+        movie_dict['large_cover_image'] = movie.large_cover_image
+        movie_dict['state'] = movie.state
+        torrents_list = []
+        for l in movie.torrents.all():
+            torrent_detail_dict = {}
+            torrent_detail_dict['url'] = l.url
+            torrent_detail_dict['hash'] = l.hash
+            torrent_detail_dict['quality'] = l.quality
+            torrent_detail_dict['seeds'] = l.seeds
+            torrent_detail_dict['peers'] = l.peers
+            torrent_detail_dict['size'] = l.size
+            torrent_detail_dict['size_bytes'] = l.size_bytes
+            torrent_detail_dict['date_uploaded'] = l.date_uploaded
+            torrent_detail_dict['date_uploaded_unix'] = l.date_uploaded_unix
+            torrents_list.append(torrent_detail_dict)
+        movie_dict['torrents'] = torrents_list
+        movie_dict['date_uploaded'] = movie.date_uploaded
+        movie_dict['date_uploaded_unix'] = movie.date_uploaded_unix
+        movies_data.append(movie_dict)
+
+        return JsonResponse(movies_data, safe=False, status=status.HTTP_201_CREATED)
